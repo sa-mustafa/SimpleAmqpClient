@@ -16,4 +16,8 @@ add_executable(test_api
     test_nack.cpp
     )
 target_link_libraries(test_api SimpleAmqpClient gtest gtest_main)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_FLAGS "-std=c++1z")
 add_test(test_api test_api)
