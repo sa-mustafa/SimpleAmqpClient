@@ -1,11 +1,11 @@
-SimpleAmqpClient
+SimpleAmqpClient [![Build Status](https://api.travis-ci.org/sa-mustafa/SimpleAmqpClient.svg?branch=master)](https://api.travis-ci.org/sa-mustafa/SimpleAmqpClient)
 ==================
 
 [SimpleAmqpClient](https://github.com/alanxz/SimpleAmqpClient) is an easy-to-use C++
 wrapper around the [rabbitmq-c](https://github.com/alanxz/rabbitmq-c) C library.
 It derives inspiration from the [puka](http://majek.github.com/puka/puka.html) AMQP library 
 in that it abstracts away the underlying AMQP wire concept of channels and uses them
-as an error/consumer scope. This should make writing simple single-threaded AMQP-enabled apps easy.
+as an error/consumer scope. This should make writing simple single-threaded AMQP-enabled apps easy. This fork requires C++ 17 instead of the original boost.
 
 Installing
 ----------------
@@ -16,9 +16,8 @@ Known to work in the following environments:
 - Mac OS X (10.7, 10.6, gcc-4.2, 32 and 64-bit). Likely to work on older version, but has not been tested
 
 ### Pre-requisites
-+  [boost-1.47.0](http://www.boost.org/) or newer (uses chrono, system internally in addition to other header based libraries such as sharedptr and noncopyable)
 +  [rabbitmq-c](http://github.com/alanxz/rabbitmq-c) you'll need version 0.5.1 or better.
-+  [cmake 2.8+](http://www.cmake.org/) what is needed for the build system
++  [cmake 3.8+](http://www.cmake.org/) what is needed for the build system
 +  [Doxygen](http://www.stack.nl/~dimitri/doxygen/) OPTIONAL only necessary to generate API documentation
 
 ### Build procedure
@@ -38,8 +37,7 @@ Interesting targets
 +  doc - will generate API documentation if you have doxygen setup
 
 Notes:
-+ The test google-test based test suite can be enabled by passing ```-DENABLE_TESTING=ON``` to
-  cmake
++ The test google-test based test suite can be enabled by passing ```-DENABLE_TESTING=ON``` to cmake
 
 Using the library
 -----------------
