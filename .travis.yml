@@ -3,7 +3,7 @@
 
 language: cpp
 
-dist: trusty
+dist: bionic
 sudo: true
 
 compiler:
@@ -22,7 +22,7 @@ addons:
       name: "alanxz/SimpleAmqpClient"
       description: "Simple C++ Interface to rabbitmq-c"
     notification_email: alan.antonuk@gmail.com
-    build_command_prepend: cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTING=OFF -DRabbitmqc_DIR=${RABBITMQC_DIR} ..
+    build_command_prepend: cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTING=ON -DRabbitmqc_DIR=${RABBITMQC_DIR} ..
     build_command: cmake --build .
     branch_pattern: coverity_scan
 
