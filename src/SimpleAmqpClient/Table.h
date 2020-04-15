@@ -30,9 +30,6 @@
 
 #include "SimpleAmqpClient/Util.h"
 
-#include <boost/cstdint.hpp>
-#include <boost/scoped_ptr.hpp>
-
 #include <map>
 #include <string>
 #include <vector>

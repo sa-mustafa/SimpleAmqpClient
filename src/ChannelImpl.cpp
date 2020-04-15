@@ -44,6 +44,7 @@
 #include "SimpleAmqpClient/ConnectionClosedException.h"
 #include "SimpleAmqpClient/ConsumerTagNotFoundException.h"
 
+#include <assert.h>
 #include <array>
 #include <chrono>
 #include <iostream>
