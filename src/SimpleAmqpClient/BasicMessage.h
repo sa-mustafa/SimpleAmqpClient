@@ -31,6 +31,7 @@
 #include "SimpleAmqpClient/Table.h"
 #include "SimpleAmqpClient/Util.h"
 
+#include <memory>
 #include <string>
 
 #ifdef _MSC_VER

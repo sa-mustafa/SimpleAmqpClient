@@ -31,6 +31,7 @@
 #include "SimpleAmqpClient/BasicMessage.h"
 #include "SimpleAmqpClient/Util.h"
 
+#include <memory>
 #include <string>
 
 #ifdef _MSC_VER
@@ -105,9 +106,9 @@ class SIMPLEAMQPCLIENT_EXPORT Envelope : noncopyable {
   /**
    * Get the flag that indicates whether the message was redelivered
    *
-   * A flag that indicates whether the message was redelievered means
+   * A flag that indicates whether the message was re-delivered means
    * the broker tried to deliver the message and the client did not Ack
-   * the message, so the message was requeued, or the client asked the broker
+   * the message, so the message was re-queued, or the client asked the broker
    * to Recover which forced all non-Acked messages to be redelivered
    *
    * @return a boolean flag indicating whether the message was redelivered
