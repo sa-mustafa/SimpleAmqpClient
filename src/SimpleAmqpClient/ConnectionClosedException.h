@@ -34,8 +34,7 @@ namespace AmqpClient {
 
 class ConnectionClosedException : public std::runtime_error {
  public:
-  explicit ConnectionClosedException()
-      : std::runtime_error("Connection is closed") {}
+  explicit ConnectionClosedException() : std::runtime_error("Connection is closed") {}
 };
 }  // namespace AmqpClient
 #endif  // SIMPLEAMQPCLIENT_CONNECTIONCLOSEDEXCEPTION_H

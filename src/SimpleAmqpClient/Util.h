@@ -38,4 +38,14 @@
 #define SIMPLEAMQPCLIENT_EXPORT
 #endif
 
+class noncopyable {
+public:
+	noncopyable() = default;
+	~noncopyable() = default;
+
+private:
+	noncopyable(const noncopyable&) = delete;
+	noncopyable& operator=(const noncopyable&) = delete;
+};
+
 #endif  // SIMPLEAMQPCLIENT_UTIL_H

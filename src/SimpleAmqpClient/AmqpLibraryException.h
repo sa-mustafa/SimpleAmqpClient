@@ -45,14 +45,12 @@ namespace AmqpClient {
 class SIMPLEAMQPCLIENT_EXPORT AmqpLibraryException : public std::runtime_error {
  public:
   static AmqpLibraryException CreateException(int error_code);
-  static AmqpLibraryException CreateException(int error_code,
-                                              const std::string &context);
+  static AmqpLibraryException CreateException(int error_code, const std::string &context);
 
   int ErrorCode() const { return m_errorCode; }
 
  protected:
-  explicit AmqpLibraryException(const std::string &message,
-                                int error_code) throw();
+  explicit AmqpLibraryException(const std::string &message, int error_code) throw();
 
  private:
   int m_errorCode;
