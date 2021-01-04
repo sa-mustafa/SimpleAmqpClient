@@ -28,23 +28,33 @@
  * ***** END LICENSE BLOCK *****
  */
 
-#include "Util.h"
-
 #include <stdexcept>
+
+#include "Util.h"
 
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4251 4275)
 #endif
 
+/// @file SimpleAmqpClient/ConsumerTagNotFoundException.h
+/// Defines AmqpClient::ConsumerTagNotFoundException
+
 namespace AmqpClient {
 
+/**
+ * "Consumer tag not found" exception
+ *
+ * @see BasicConsume
+ */
 class SIMPLEAMQPCLIENT_EXPORT ConsumerTagNotFoundException : public std::runtime_error {
  public:
-  ConsumerTagNotFoundException() throw() : std::runtime_error("The specified consumer tag is unknown") {}
+  /// Constructor
+  ConsumerTagNotFoundException() throw()
+      : std::runtime_error("The specified consumer tag is unknown") {}
+  /// Destructor
   virtual ~ConsumerTagNotFoundException() throw() {}
 };
 
 }  // namespace AmqpClient
-
 #endif  // SIMPLEAMQPCLIENT_CONSUMERTAGNOTFOUND_H

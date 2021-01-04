@@ -28,14 +28,14 @@
  * ***** END LICENSE BLOCK *****
  */
 
-#include "SimpleAmqpClient/Table.h"
+#include <amqp.h>
 
 #include <functional>
 #include <string>
 #include <variant>
 #include <vector>
 
-#include <amqp.h>
+#include "SimpleAmqpClient/Table.h"
 
 namespace AmqpClient {
 namespace Detail {

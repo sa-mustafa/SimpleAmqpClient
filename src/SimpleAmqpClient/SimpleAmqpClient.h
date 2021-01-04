@@ -28,6 +28,9 @@
  * ***** END LICENSE BLOCK *****
  */
 
+/// @file SimpleAmqpClient/SimpleAmqpClient.h
+/// This "include all" header file re-exports all of SimpleAmqpClient public API
+
 #include "SimpleAmqpClient/AmqpException.h"
 #include "SimpleAmqpClient/AmqpResponseLibraryException.h"
 #include "SimpleAmqpClient/BasicMessage.h"
@@ -36,6 +39,7 @@
 #include "SimpleAmqpClient/ConsumerCancelledException.h"
 #include "SimpleAmqpClient/ConsumerTagNotFoundException.h"
 #include "SimpleAmqpClient/Envelope.h"
+#include "SimpleAmqpClient/MessageRejectedException.h"
 #include "SimpleAmqpClient/MessageReturnedException.h"
 #include "SimpleAmqpClient/Version.h"
 

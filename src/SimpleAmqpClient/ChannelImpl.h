@@ -34,6 +34,7 @@
 
 #include "SimpleAmqpClient/AmqpException.h"
 #include "SimpleAmqpClient/BasicMessage.h"
+#include "SimpleAmqpClient/Channel.h"
 #include "SimpleAmqpClient/ConsumerCancelledException.h"
 #include "SimpleAmqpClient/Envelope.h"
 #include "SimpleAmqpClient/MessageReturnedException.h"
@@ -45,9 +46,11 @@
 #include <vector>
 
 namespace AmqpClient {
-namespace Detail {
 
-class ChannelImpl : noncopyable {
+    std::string BytesToString(amqp_bytes_t bytes);
+    void SetMessageProperties(BasicMessage &mes, const amqp_basic_properties_t &props);
+
+class Channel::ChannelImpl : noncopyable {
  public:
   ChannelImpl();
   virtual ~ChannelImpl();
@@ -57,7 +60,8 @@ class ChannelImpl : noncopyable {
   typedef std::map<amqp_channel_t, frame_queue_t> channel_map_t;
   typedef channel_map_t::iterator channel_map_iterator_t;
 
-  void DoLogin(const std::string &username, const std::string &password, const std::string &vhost, int frame_max);
+  void DoLogin(const std::string &username, const std::string &password,
+               const std::string &vhost, int frame_max, bool sasl_external = false);
   amqp_channel_t GetChannel();
   void ReturnChannel(amqp_channel_t channel);
   bool IsChannelOpen(amqp_channel_t channel);
@@ -85,7 +89,8 @@ class ChannelImpl : noncopyable {
 
       if (frame.channel == 0) {
         // Only thing we care to handle on the channel0 is the connection.close method
-        if (AMQP_FRAME_METHOD == frame.frame_type && AMQP_CONNECTION_CLOSE_METHOD == frame.payload.method.id) {
+        if (AMQP_FRAME_METHOD == frame.frame_type &&
+            AMQP_CONNECTION_CLOSE_METHOD == frame.payload.method.id) {
           FinishCloseConnection();
           AmqpException::Throw(*reinterpret_cast<amqp_connection_close_t *>(frame.payload.method.decoded));
         }
@@ -94,7 +99,7 @@ class ChannelImpl : noncopyable {
       }
 
       if (timeout != std::chrono::microseconds::max()) {
-        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
         if (now >= end_point) {
           return false;
         }
@@ -107,7 +112,9 @@ class ChannelImpl : noncopyable {
   bool GetNextFrameOnChannel(amqp_channel_t channel, amqp_frame_t &frame,
                              std::chrono::microseconds timeout = std::chrono::microseconds::max());
 
-  static bool is_on_channel(const amqp_frame_t frame, amqp_channel_t channel) { return channel == frame.channel; }
+  static bool is_on_channel(const amqp_frame_t frame, amqp_channel_t channel) {
+    return channel == frame.channel;
+  }
 
   static bool is_frame_type_on_channel(const amqp_frame_t frame, uint8_t frame_type, amqp_channel_t channel) {
     return frame.frame_type == frame_type && frame.channel == channel;
@@ -120,10 +127,11 @@ class ChannelImpl : noncopyable {
   template <class ChannelListType, class ResponseListType>
   static bool is_expected_method_on_channel(const amqp_frame_t &frame, const ChannelListType channels,
                                             const ResponseListType &expected_responses) {
-    return channels.end() != std::find(channels.begin(), channels.end(), frame.channel) &&
+    return channels.end() != 
+        std::find(channels.begin(), channels.end(), frame.channel) &&
            AMQP_FRAME_METHOD == frame.frame_type &&
-           expected_responses.end() !=
-               std::find(expected_responses.begin(), expected_responses.end(), frame.payload.method.id);
+                expected_responses.end() !=
+                    std::find(expected_responses.begin(), expected_responses.end(), frame.payload.method.id);
   }
 
   template <class ChannelListType, class ResponseListType>
@@ -167,7 +175,7 @@ class ChannelImpl : noncopyable {
       m_frame_queue.push_back(incoming_frame);
 
       if (timeout != std::chrono::microseconds::max()) {
-        std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
         if (now >= end_point) {
           return false;
         }
@@ -190,7 +198,8 @@ class ChannelImpl : noncopyable {
   }
 
   template <class ResponseListType>
-  amqp_frame_t DoRpc(uint32_t method_id, void *decoded, const ResponseListType &expected_responses) {
+  amqp_frame_t DoRpc(uint32_t method_id, void *decoded,
+                     const ResponseListType &expected_responses) {
     amqp_channel_t channel = GetChannel();
     amqp_frame_t ret = DoRpcOnChannel(channel, method_id, decoded, expected_responses);
     ReturnChannel(channel);
@@ -207,7 +216,7 @@ class ChannelImpl : noncopyable {
     using namespace std::placeholders;
     envelope_list_t::iterator it =
         std::find_if(m_delivered_messages.begin(), m_delivered_messages.end(),
-                     std::bind(ChannelImpl::envelope_on_channel<ChannelListType>, _1, channels));
+            std::bind(ChannelImpl::envelope_on_channel<ChannelListType>, _1, channels));
 
     if (it != m_delivered_messages.end()) {
       message = *it;
@@ -220,10 +229,12 @@ class ChannelImpl : noncopyable {
 
   template <class ChannelListType>
   bool ConsumeMessageOnChannelInner(const ChannelListType channels, Envelope::ptr_t &message, int timeout) {
-    const std::array<uint32_t, 2> DELIVER_OR_CANCEL = {{AMQP_BASIC_DELIVER_METHOD, AMQP_BASIC_CANCEL_METHOD}};
+    const std::array<uint32_t, 2> DELIVER_OR_CANCEL = 
+        {{AMQP_BASIC_DELIVER_METHOD, AMQP_BASIC_CANCEL_METHOD}};
 
     std::chrono::microseconds real_timeout =
-        (timeout >= 0 ? std::chrono::milliseconds(timeout) : std::chrono::microseconds::max());
+        (timeout >= 0 ? std::chrono::milliseconds(timeout) 
+                      : std::chrono::microseconds::max());
 
     amqp_frame_t deliver;
     if (!GetMethodOnChannel(channels, deliver, DELIVER_OR_CANCEL, real_timeout)) {
@@ -231,7 +242,8 @@ class ChannelImpl : noncopyable {
     }
 
     if (AMQP_BASIC_CANCEL_METHOD == deliver.payload.method.id) {
-      amqp_basic_cancel_t *cancel_method = reinterpret_cast<amqp_basic_cancel_t *>(deliver.payload.method.decoded);
+      amqp_basic_cancel_t *cancel_method = 
+          reinterpret_cast<amqp_basic_cancel_t *>(deliver.payload.method.decoded);
       std::string consumer_tag((char *)cancel_method->consumer_tag.bytes, cancel_method->consumer_tag.len);
 
       RemoveConsumer(consumer_tag);
@@ -241,7 +253,8 @@ class ChannelImpl : noncopyable {
       throw ConsumerCancelledException(consumer_tag);
     }
 
-    amqp_basic_deliver_t *deliver_method = reinterpret_cast<amqp_basic_deliver_t *>(deliver.payload.method.decoded);
+    amqp_basic_deliver_t *deliver_method =
+        reinterpret_cast<amqp_basic_deliver_t *>(deliver.payload.method.decoded);
 
     const std::string exchange((char *)deliver_method->exchange.bytes, deliver_method->exchange.len);
     const std::string routing_key((char *)deliver_method->routing_key.bytes, deliver_method->routing_key.len);
@@ -253,8 +266,8 @@ class ChannelImpl : noncopyable {
     BasicMessage::ptr_t content = ReadContent(deliver.channel);
     MaybeReleaseBuffersOnChannel(deliver.channel);
 
-    message =
-        Envelope::Create(content, in_consumer_tag, delivery_tag, exchange, redelivered, routing_key, deliver.channel);
+    message = Envelope::Create(content, in_consumer_tag, delivery_tag, exchange,
+                               redelivered, routing_key, deliver.channel);
     return true;
   }
 
@@ -311,6 +324,5 @@ class ChannelImpl : noncopyable {
   bool m_is_connected;
 };
 
-}  // namespace Detail
 }  // namespace AmqpClient
 #endif  // SIMPLEAMQPCLIENT_CHANNELIMPL_H

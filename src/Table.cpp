@@ -30,8 +30,10 @@
 #include "SimpleAmqpClient/TableImpl.h"
 
 #include <algorithm>
+#include <ctime>
 #include <iterator>
 #include <variant>
+#include <stdexcept>
 
 namespace AmqpClient {
 TableValue::TableValue() : m_impl(new Detail::TableValueImpl(Detail::void_t())) {}
@@ -51,6 +53,8 @@ TableValue::TableValue(uint32_t value) : m_impl(new Detail::TableValueImpl(value
 TableValue::TableValue(int32_t value) : m_impl(new Detail::TableValueImpl(value)) {}
 
 TableValue::TableValue(uint64_t value) : m_impl(new Detail::TableValueImpl(value)) {}
+
+TableValue TableValue::Timestamp(std::time_t ts) { return TableValue(static_cast<uint64_t>(ts)); }
 
 TableValue::TableValue(int64_t value) : m_impl(new Detail::TableValueImpl(value)) {}
 
@@ -123,7 +127,7 @@ uint32_t TableValue::GetUint32() const { return std::get<uint32_t>(m_impl->m_val
 
 int32_t TableValue::GetInt32() const { return std::get<int32_t>(m_impl->m_value); }
 
-uint64_t TableValue::GetUint64() const { return std::get<uint64_t>(m_impl->m_value); }
+std::time_t TableValue::GetTimestamp() const { return static_cast<std::time_t>(std::get<uint64_t>(m_impl->m_value)); }
 
 int64_t TableValue::GetInt64() const { return std::get<int64_t>(m_impl->m_value); }
 
@@ -141,12 +145,8 @@ int64_t TableValue::GetInteger() const {
       return GetUint32();
     case VT_int32:
       return GetInt32();
-    case VT_uint64: {
-      const uint64_t value = GetUint64();
-      if (value > std::numeric_limits<int64_t>::max())
-        throw std::overflow_error("Result of GetUint64() is out of range.");
-      return value;
-    }
+    case VT_timestamp: 
+      return GetTimestamp();
     case VT_int64:
       return GetInt64();
     default:
@@ -191,7 +191,7 @@ void TableValue::Set(uint32_t value) { m_impl->m_value = value; }
 
 void TableValue::Set(int32_t value) { m_impl->m_value = value; }
 
-void TableValue::Set(uint64_t value) { m_impl->m_value = value; }
+void TableValue::SetTimestamp(std::time_t value) { m_impl->m_value = static_cast<uint64_t>(value); }
 
 void TableValue::Set(int64_t value) { m_impl->m_value = value; }
 

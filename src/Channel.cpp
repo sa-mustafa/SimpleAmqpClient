@@ -34,14 +34,16 @@
 #include <amqp_ssl_socket.h>
 #endif
 
-#include "SimpleAmqpClient/Channel.h"
+
 
 #include "SimpleAmqpClient/AmqpLibraryException.h"
 #include "SimpleAmqpClient/AmqpResponseLibraryException.h"
 #include "SimpleAmqpClient/BadUriException.h"
+#include "SimpleAmqpClient/Channel.h"
 #include "SimpleAmqpClient/ChannelImpl.h"
 #include "SimpleAmqpClient/ConsumerCancelledException.h"
 #include "SimpleAmqpClient/ConsumerTagNotFoundException.h"
+#include "SimpleAmqpClient/MessageRejectedException.h"
 #include "SimpleAmqpClient/MessageReturnedException.h"
 #include "SimpleAmqpClient/TableImpl.h"
 #include "SimpleAmqpClient/Util.h"
@@ -60,78 +62,239 @@
 
 namespace AmqpClient {
 
+amqp_bytes_t StringToBytes(const std::string &str) {
+  amqp_bytes_t ret;
+  ret.bytes = reinterpret_cast<void *>(const_cast<char *>(str.data()));
+  ret.len = str.length();
+  return ret;
+}
+
+amqp_basic_properties_t CreateAmqpProperties(const BasicMessage &mes,
+                                             Detail::amqp_pool_ptr_t &pool) {
+  amqp_basic_properties_t ret;
+  ret._flags = 0;
+
+  if (mes.ContentTypeIsSet()) {
+    ret.content_type = StringToBytes(mes.ContentType());
+    ret._flags |= AMQP_BASIC_CONTENT_TYPE_FLAG;
+  }
+  if (mes.ContentEncodingIsSet()) {
+    ret.content_encoding = StringToBytes(mes.ContentEncoding());
+    ret._flags |= AMQP_BASIC_CONTENT_ENCODING_FLAG;
+  }
+  if (mes.DeliveryModeIsSet()) {
+    // TODO: something more advanced?
+    ret.delivery_mode = mes.DeliveryMode();
+    ret._flags |= AMQP_BASIC_DELIVERY_MODE_FLAG;
+  }
+  if (mes.PriorityIsSet()) {
+    ret.priority = mes.Priority();
+    ret._flags |= AMQP_BASIC_PRIORITY_FLAG;
+  }
+  if (mes.CorrelationIdIsSet()) {
+    ret.correlation_id = StringToBytes(mes.CorrelationId());
+    ret._flags |= AMQP_BASIC_CORRELATION_ID_FLAG;
+  }
+  if (mes.ReplyToIsSet()) {
+    ret.reply_to = StringToBytes(mes.ReplyTo());
+    ret._flags |= AMQP_BASIC_REPLY_TO_FLAG;
+  }
+  if (mes.ExpirationIsSet()) {
+    ret.expiration = StringToBytes(mes.Expiration());
+    ret._flags = AMQP_BASIC_EXPIRATION_FLAG;
+  }
+  if (mes.MessageIdIsSet()) {
+    ret.message_id = StringToBytes(mes.MessageId());
+    ret._flags = AMQP_BASIC_MESSAGE_ID_FLAG;
+  }
+  if (mes.TimestampIsSet()) {
+    ret.timestamp = mes.Timestamp();
+    ret._flags = AMQP_BASIC_TIMESTAMP_FLAG;
+  }
+  if (mes.TypeIsSet()) {
+    ret.type = StringToBytes(mes.Type());
+    ret._flags = AMQP_BASIC_TYPE_FLAG;
+  }
+  if (mes.UserIdIsSet()) {
+    ret.user_id = StringToBytes(mes.UserId());
+    ret._flags = AMQP_BASIC_USER_ID_FLAG;
+  }
+  if (mes.AppIdIsSet()) {
+    ret.app_id = StringToBytes(mes.AppId());
+    ret._flags = AMQP_BASIC_APP_ID_FLAG;
+  }
+  if (mes.ClusterIdIsSet()) {
+    ret.cluster_id = StringToBytes(mes.ClusterId());
+    ret._flags = AMQP_BASIC_CLUSTER_ID_FLAG;
+  }
+  if (mes.HeaderTableIsSet()) {
+    ret.headers =
+        Detail::TableValueImpl::CreateAmqpTable(mes.HeaderTable(), pool);
+    ret._flags = AMQP_BASIC_HEADERS_FLAG;
+  }
+  return ret;
+}
 const std::string Channel::EXCHANGE_TYPE_DIRECT("direct");
 const std::string Channel::EXCHANGE_TYPE_FANOUT("fanout");
 const std::string Channel::EXCHANGE_TYPE_TOPIC("topic");
+
+struct Channel::SSLConnectionParams {
+  std::string path_to_ca_cert;
+  std::string path_to_client_key;
+  std::string path_to_client_cert;
+  bool verify_hostname;
+  bool verify_peer;
+};
+
+Channel::ptr_t Channel::Create(const std::string &host, int port,
+                               const std::string &username,
+                               const std::string &password,
+                               const std::string &vhost, int frame_max) {
+  return std::make_shared<Channel>(OpenChannel(host, port, username, password, vhost, frame_max, false));
+}
+
+Channel::ptr_t Channel::CreateSaslExternal(const std::string &host, int port,
+                                           const std::string &identity,
+                                           const std::string &vhost,
+                                           int frame_max) {
+  return std::make_shared<Channel>(OpenChannel(host, port, identity, "", vhost, frame_max, true));
+}
+
+Channel::ptr_t Channel::CreateSecure(const std::string &path_to_ca_cert,
+                                     const std::string &host,
+                                     const std::string &path_to_client_key,
+                                     const std::string &path_to_client_cert,
+                                     int port, const std::string &username,
+                                     const std::string &password,
+                                     const std::string &vhost, int frame_max,
+                                     bool verify_hostname_and_peer) {
+  return CreateSecure(path_to_ca_cert, host, path_to_client_key,
+                      path_to_client_cert, port, username, password, vhost,
+                      frame_max, verify_hostname_and_peer,
+                      verify_hostname_and_peer);
+}
+
+Channel::ptr_t Channel::CreateSecure(const std::string &path_to_ca_cert,
+                                     const std::string &host,
+                                     const std::string &path_to_client_key,
+                                     const std::string &path_to_client_cert,
+                                     int port, const std::string &username,
+                                     const std::string &password,
+                                     const std::string &vhost, int frame_max,
+                                     bool verify_hostname, bool verify_peer) {
+  SSLConnectionParams ssl_params;
+  ssl_params.path_to_ca_cert = path_to_ca_cert;
+  ssl_params.path_to_client_key = path_to_client_key;
+  ssl_params.path_to_client_cert = path_to_client_cert;
+  ssl_params.verify_hostname = verify_hostname;
+  ssl_params.verify_peer = verify_peer;
+
+  return std::make_shared<Channel>(OpenSecureChannel(host, port, username, password, vhost, frame_max, ssl_params, false));
+}
+
+Channel::ptr_t Channel::CreateSecureSaslExternal(
+    const std::string &path_to_ca_cert, const std::string &host,
+    const std::string &path_to_client_key,
+    const std::string &path_to_client_cert, int port,
+    const std::string &identity, const std::string &vhost, int frame_max,
+    bool verify_hostname, bool verify_peer) {
+  SSLConnectionParams ssl_params;
+  ssl_params.path_to_ca_cert = path_to_ca_cert;
+  ssl_params.path_to_client_key = path_to_client_key;
+  ssl_params.path_to_client_cert = path_to_client_cert;
+  ssl_params.verify_hostname = verify_hostname;
+  ssl_params.verify_peer = verify_peer;
+
+  return std::make_shared<Channel>(OpenSecureChannel(
+      host, port, identity, "", vhost, frame_max, ssl_params, true));
+}
 
 Channel::ptr_t Channel::CreateFromUri(const std::string &uri, int frame_max) {
   amqp_connection_info info;
   amqp_default_connection_info(&info);
 
-  std::shared_ptr<char> uri_dup = std::shared_ptr<char>(strdup(uri.c_str()), free);
-
-  if (0 != amqp_parse_url(uri_dup.get(), &info)) {
-    throw BadUriException();
-  }
-
-  return Create(std::string(info.host), info.port, std::string(info.user), std::string(info.password),
-                std::string(info.vhost), frame_max);
-}
-
-Channel::ptr_t Channel::CreateSecureFromUri(const std::string &uri, const std::string &path_to_ca_cert,
-                                            const std::string &path_to_client_key,
-                                            const std::string &path_to_client_cert, bool verify_hostname,
-                                            int frame_max) {
-  amqp_connection_info info;
-  amqp_default_connection_info(&info);
-
-  std::shared_ptr<char> uri_dup = std::shared_ptr<char>(strdup(uri.c_str()), free);
+  std::shared_ptr<char> uri_dup =
+      std::shared_ptr<char>(strdup(uri.c_str()), free);
 
   if (0 != amqp_parse_url(uri_dup.get(), &info)) {
     throw BadUriException();
   }
 
   if (info.ssl) {
-    return CreateSecure(path_to_ca_cert, std::string(info.host), path_to_client_key, path_to_client_cert, info.port,
-                        std::string(info.user), std::string(info.password), std::string(info.vhost), frame_max,
-                        verify_hostname);
+    throw std::runtime_error("CreateFromUri only supports non-SSL-enabled URIs");
   }
-  throw std::runtime_error("CreateSecureFromUri only supports SSL-enabled URIs.");
+
+  return Create(std::string(info.host), info.port, std::string(info.user),
+                std::string(info.password), std::string(info.vhost), frame_max);
 }
 
-Channel::Channel(const std::string &host, int port, const std::string &username, const std::string &password,
-                 const std::string &vhost, int frame_max)
-    : m_impl(new Detail::ChannelImpl) {
-  m_impl->m_connection = amqp_new_connection();
+Channel::ptr_t Channel::CreateSecureFromUri(
+    const std::string &uri,
+    const std::string &path_to_ca_cert,
+    const std::string &path_to_client_key,
+    const std::string &path_to_client_cert,
+    bool verify_hostname_and_peer,
+    int frame_max) {
+  amqp_connection_info info;
+  amqp_default_connection_info(&info);
 
-  if (NULL == m_impl->m_connection) {
+  std::shared_ptr<char> uri_dup = std::shared_ptr<char>(strdup(uri.c_str()), free);
+
+  if (0 != amqp_parse_url(uri_dup.get(), &info)) {
+    throw BadUriException();
+  }
+
+  if (!info.ssl) {
+    throw std::runtime_error("CreateSecureFromUri only supports SSL-enabled URIs");
+  }
+
+    return CreateSecure(path_to_ca_cert, std::string(info.host),
+                        path_to_client_key, path_to_client_cert, info.port,
+                        std::string(info.user), std::string(info.password),
+                        std::string(info.vhost), frame_max,
+                        verify_hostname_and_peer);
+}
+
+Channel::ChannelImpl *Channel::OpenChannel(const std::string &host, int port,
+                                           const std::string &username,
+                                           const std::string &password,
+                                           const std::string &vhost,
+                                           int frame_max, bool sasl_external) {
+  ChannelImpl *impl = new ChannelImpl;
+  impl->m_connection = amqp_new_connection();
+
+  if (NULL == impl->m_connection) {
     throw std::bad_alloc();
   }
 
   try {
-    amqp_socket_t *socket = amqp_tcp_socket_new(m_impl->m_connection);
+    amqp_socket_t *socket = amqp_tcp_socket_new(impl->m_connection);
     int sock = amqp_socket_open(socket, host.c_str(), port);
-    m_impl->CheckForError(sock);
+    impl->CheckForError(sock);
 
-    m_impl->DoLogin(username, password, vhost, frame_max);
+    impl->DoLogin(username, password, vhost, frame_max, sasl_external);
   } catch (...) {
-    amqp_destroy_connection(m_impl->m_connection);
+    amqp_destroy_connection(impl->m_connection);
+    delete impl;
     throw;
   }
 
-  m_impl->SetIsConnected(true);
+  impl->SetIsConnected(true);
+  return impl;
 }
 
 #ifdef SAC_SSL_SUPPORT_ENABLED
-Channel::Channel(const std::string &host, int port, const std::string &username, const std::string &password,
-                 const std::string &vhost, int frame_max, const SSLConnectionParams &ssl_params)
-    : m_impl(new Detail::ChannelImpl) {
-  m_impl->m_connection = amqp_new_connection();
-  if (NULL == m_impl->m_connection) {
+Channel::ChannelImpl *Channel::OpenSecureChannel(
+    const std::string &host, int port, const std::string &username,
+    const std::string &password, const std::string &vhost, int frame_max,
+    const SSLConnectionParams &ssl_params, bool sasl_external) {
+  Channel::ChannelImpl *impl = new ChannelImpl;
+  impl->m_connection = amqp_new_connection();
+  if (NULL == impl->m_connection) {
     throw std::bad_alloc();
   }
 
-  amqp_socket_t *socket = amqp_ssl_socket_new(m_impl->m_connection);
+  amqp_socket_t *socket = amqp_ssl_socket_new(impl->m_connection);
   if (NULL == socket) {
     throw std::bad_alloc();
   }
@@ -148,9 +311,12 @@ Channel::Channel(const std::string &host, int port, const std::string &username,
       throw AmqpLibraryException::CreateException(status, "Error setting CA certificate for socket");
     }
 
-    if (ssl_params.path_to_client_key != "" && ssl_params.path_to_client_cert != "") {
-      status = amqp_ssl_socket_set_key(socket, ssl_params.path_to_client_cert.c_str(),
-                                       ssl_params.path_to_client_key.c_str());
+    if (ssl_params.path_to_client_key != "" &&
+        ssl_params.path_to_client_cert != "") {
+        status = amqp_ssl_socket_set_key(socket,
+            ssl_params.path_to_client_cert.c_str(),
+            ssl_params.path_to_client_key.c_str());
+
       if (status) {
         throw AmqpLibraryException::CreateException(status, "Error setting client certificate for socket");
       }
@@ -161,34 +327,45 @@ Channel::Channel(const std::string &host, int port, const std::string &username,
       throw AmqpLibraryException::CreateException(status, "Error setting client certificate for socket");
     }
 
-    m_impl->DoLogin(username, password, vhost, frame_max);
+    impl->DoLogin(username, password, vhost, frame_max, sasl_external);
   } catch (...) {
-    amqp_destroy_connection(m_impl->m_connection);
+    amqp_destroy_connection(impl->m_connection);
+    delete impl;
     throw;
   }
 
-  m_impl->SetIsConnected(true);
+  impl->SetIsConnected(true);
+  return impl;
 }
 #else
-Channel::Channel(const std::string &, int, const std::string &, const std::string &, const std::string &, int, const SSLConnectionParams &) {
+Channel::ChannelImpl *Channel::OpenSecureChannel(
+    const std::string &, int, const std::string &, const std::string &,
+    const std::string &, int, const SSLConnectionParams &, bool) {
   throw std::logic_error("SSL support has not been compiled into SimpleAmqpClient");
 }
 #endif
+
+Channel::Channel(ChannelImpl *impl) : m_impl(impl) {}
 
 Channel::~Channel() {
   amqp_connection_close(m_impl->m_connection, AMQP_REPLY_SUCCESS);
   amqp_destroy_connection(m_impl->m_connection);
 }
 
-int Channel::GetSocketFD() const { return amqp_get_sockfd(m_impl->m_connection); }
+int Channel::GetSocketFD() const {
+    return amqp_get_sockfd(m_impl->m_connection);
+}
 
-void Channel::DeclareExchange(const std::string &exchange_name, const std::string &exchange_type, bool passive,
+void Channel::DeclareExchange(const std::string &exchange_name,
+                              const std::string &exchange_type, bool passive,
                               bool durable, bool auto_delete) {
   DeclareExchange(exchange_name, exchange_type, passive, durable, auto_delete, Table());
 }
 
-void Channel::DeclareExchange(const std::string &exchange_name, const std::string &exchange_type, bool passive,
-                              bool durable, bool auto_delete, const Table &arguments) {
+void Channel::DeclareExchange(const std::string &exchange_name,
+                              const std::string &exchange_type, bool passive,
+                              bool durable, bool auto_delete,
+                              const Table &arguments) {
   const std::array<uint32_t, 1> DECLARE_OK = {{AMQP_EXCHANGE_DECLARE_OK_METHOD}};
   m_impl->CheckIsConnected();
 
@@ -221,11 +398,15 @@ void Channel::DeleteExchange(const std::string &exchange_name, bool if_unused) {
   m_impl->MaybeReleaseBuffersOnChannel(frame.channel);
 }
 
-void Channel::BindExchange(const std::string &destination, const std::string &source, const std::string &routing_key) {
+void Channel::BindExchange(const std::string &destination,
+                           const std::string &source,
+                           const std::string &routing_key) {
   BindExchange(destination, source, routing_key, Table());
 }
 
-void Channel::BindExchange(const std::string &destination, const std::string &source, const std::string &routing_key,
+void Channel::BindExchange(const std::string &destination,
+                           const std::string &source,
+                           const std::string &routing_key,
                            const Table &arguments) {
   const std::array<uint32_t, 1> BIND_OK = {{AMQP_EXCHANGE_BIND_OK_METHOD}};
   m_impl->CheckIsConnected();
@@ -243,12 +424,15 @@ void Channel::BindExchange(const std::string &destination, const std::string &so
   m_impl->MaybeReleaseBuffersOnChannel(frame.channel);
 }
 
-void Channel::UnbindExchange(const std::string &destination, const std::string &source,
+void Channel::UnbindExchange(const std::string &destination,
+                             const std::string &source,
                              const std::string &routing_key) {
   UnbindExchange(destination, source, routing_key, Table());
 }
 
-void Channel::UnbindExchange(const std::string &destination, const std::string &source, const std::string &routing_key,
+void Channel::UnbindExchange(const std::string &destination,
+                             const std::string &source,
+                             const std::string &routing_key,
                              const Table &arguments) {
   const std::array<uint32_t, 1> UNBIND_OK = {{AMQP_EXCHANGE_UNBIND_OK_METHOD}};
   m_impl->CheckIsConnected();
@@ -266,29 +450,37 @@ void Channel::UnbindExchange(const std::string &destination, const std::string &
   m_impl->MaybeReleaseBuffersOnChannel(frame.channel);
 }
 
-std::string Channel::DeclareQueue(const std::string &queue_name, bool passive, bool durable, bool exclusive,
-                                  bool auto_delete) {
+std::string Channel::DeclareQueue(const std::string &queue_name, bool passive,
+                                  bool durable, bool exclusive, bool auto_delete) {
   return DeclareQueue(queue_name, passive, durable, exclusive, auto_delete, Table());
 }
 
-std::string Channel::DeclareQueue(const std::string &queue_name, bool passive, bool durable, bool exclusive,
-                                  bool auto_delete, const Table &arguments) {
+std::string Channel::DeclareQueue(const std::string &queue_name, bool passive,
+                                  bool durable, bool exclusive, bool auto_delete,
+                                  const Table &arguments) {
   uint32_t message_count;
   uint32_t consumer_count;
-  return DeclareQueueWithCounts(queue_name, message_count, consumer_count, passive, durable, exclusive, auto_delete,
+  return DeclareQueueWithCounts(queue_name, message_count, consumer_count,
+                                passive, durable, exclusive, auto_delete,
                                 arguments);
 }
 
-std::string Channel::DeclareQueueWithCounts(const std::string &queue_name, uint32_t &message_count,
-                                            uint32_t &consumer_count, bool passive, bool durable, bool exclusive,
-                                            bool auto_delete) {
-  return DeclareQueueWithCounts(queue_name, message_count, consumer_count, passive, durable, exclusive, auto_delete,
+std::string Channel::DeclareQueueWithCounts(const std::string &queue_name,
+                                            uint32_t &message_count,
+                                            uint32_t &consumer_count,
+                                            bool passive, bool durable,
+                                            bool exclusive, bool auto_delete) {
+  return DeclareQueueWithCounts(queue_name, message_count, consumer_count,
+                                passive, durable, exclusive, auto_delete,
                                 Table());
 }
 
-std::string Channel::DeclareQueueWithCounts(const std::string &queue_name, uint32_t &message_count,
-                                            uint32_t &consumer_count, bool passive, bool durable, bool exclusive,
-                                            bool auto_delete, const Table &arguments) {
+std::string Channel::DeclareQueueWithCounts(const std::string &queue_name,
+                                            uint32_t &message_count,
+                                            uint32_t &consumer_count,
+                                            bool passive, bool durable,
+                                            bool exclusive, bool auto_delete,
+                                            const Table &arguments) {
   const std::array<uint32_t, 1> DECLARE_OK = {{AMQP_QUEUE_DECLARE_OK_METHOD}};
   m_impl->CheckIsConnected();
 
@@ -305,7 +497,8 @@ std::string Channel::DeclareQueueWithCounts(const std::string &queue_name, uint3
 
   amqp_frame_t response = m_impl->DoRpc(AMQP_QUEUE_DECLARE_METHOD, &declare, DECLARE_OK);
 
-  amqp_queue_declare_ok_t *declare_ok = (amqp_queue_declare_ok_t *)response.payload.method.decoded;
+  amqp_queue_declare_ok_t *declare_ok =
+	(amqp_queue_declare_ok_t *)response.payload.method.decoded;
 
   std::string ret((char *)declare_ok->queue.bytes, declare_ok->queue.len);
 
@@ -330,12 +523,15 @@ void Channel::DeleteQueue(const std::string &queue_name, bool if_unused, bool if
   m_impl->MaybeReleaseBuffersOnChannel(frame.channel);
 }
 
-void Channel::BindQueue(const std::string &queue_name, const std::string &exchange_name,
+void Channel::BindQueue(const std::string &queue_name,
+                        const std::string &exchange_name,
                         const std::string &routing_key) {
   BindQueue(queue_name, exchange_name, routing_key, Table());
 }
 
-void Channel::BindQueue(const std::string &queue_name, const std::string &exchange_name, const std::string &routing_key,
+void Channel::BindQueue(const std::string &queue_name,
+                        const std::string &exchange_name,
+                        const std::string &routing_key,
                         const Table &arguments) {
   const std::array<uint32_t, 1> BIND_OK = {{AMQP_QUEUE_BIND_OK_METHOD}};
   m_impl->CheckIsConnected();
@@ -353,13 +549,16 @@ void Channel::BindQueue(const std::string &queue_name, const std::string &exchan
   m_impl->MaybeReleaseBuffersOnChannel(frame.channel);
 }
 
-void Channel::UnbindQueue(const std::string &queue_name, const std::string &exchange_name,
+void Channel::UnbindQueue(const std::string &queue_name,
+                          const std::string &exchange_name,
                           const std::string &routing_key) {
   UnbindQueue(queue_name, exchange_name, routing_key, Table());
 }
 
-void Channel::UnbindQueue(const std::string &queue_name, const std::string &exchange_name,
-                          const std::string &routing_key, const Table &arguments) {
+void Channel::UnbindQueue(const std::string &queue_name,
+                          const std::string &exchange_name,
+                          const std::string &routing_key,
+                          const Table &arguments) {
   const std::array<uint32_t, 1> UNBIND_OK = {{AMQP_QUEUE_UNBIND_OK_METHOD}};
   m_impl->CheckIsConnected();
 
@@ -387,9 +586,13 @@ void Channel::PurgeQueue(const std::string &queue_name) {
   m_impl->MaybeReleaseBuffersOnChannel(frame.channel);
 }
 
-void Channel::BasicAck(const Envelope::ptr_t &message) { BasicAck(message->GetDeliveryInfo()); }
+void Channel::BasicAck(const Envelope::ptr_t &message) {
+  BasicAck(message->GetDeliveryInfo());
+}
 
-void Channel::BasicAck(const Envelope::DeliveryInfo &info) { BasicAck(info, false); }
+void Channel::BasicAck(const Envelope::DeliveryInfo &info) {
+  BasicAck(info, false);
+}
 
 void Channel::BasicAck(const Envelope::DeliveryInfo &info, bool multiple) {
   m_impl->CheckIsConnected();
@@ -427,28 +630,48 @@ void Channel::BasicReject(const Envelope::DeliveryInfo &info, bool requeue, bool
   m_impl->CheckForError(amqp_send_method(m_impl->m_connection, channel, AMQP_BASIC_NACK_METHOD, &req));
 }
 
-void Channel::BasicPublish(const std::string &exchange_name, const std::string &routing_key,
-                           const BasicMessage::ptr_t message, bool mandatory, bool immediate) {
+void Channel::BasicPublish(const std::string &exchange_name,
+                           const std::string &routing_key,
+                           const BasicMessage::ptr_t message,
+                           bool mandatory,
+                           bool immediate) {
   m_impl->CheckIsConnected();
   amqp_channel_t channel = m_impl->GetChannel();
 
-  m_impl->CheckForError(amqp_basic_publish(m_impl->m_connection, channel, amqp_cstring_bytes(exchange_name.c_str()),
-                                           amqp_cstring_bytes(routing_key.c_str()), mandatory, immediate,
-                                           message->getAmqpProperties(), message->getAmqpBody()));
+  Detail::amqp_pool_ptr_t pool;
+  amqp_basic_properties_t properties = CreateAmqpProperties(*message, pool);
+
+  m_impl->CheckForError(amqp_basic_publish(
+      m_impl->m_connection, channel, amqp_cstring_bytes(exchange_name.c_str()),
+      amqp_cstring_bytes(routing_key.c_str()), mandatory, immediate,
+      &properties, StringToBytes(message->Body())));
 
   // If we've done things correctly we can get one of 4 things back from the broker
   // - basic.ack - our channel is in confirm mode, message was 'dealt with' by the broker
+  // - basic.nack - our channel is in confirm mode, queue has max-length set and is full, queue overflow stratege is reject-publish
   // - basic.return then basic.ack - the message wasn't delivered, but was dealt with
   // - channel.close - probably tried to publish to a non-existent exchange, in any case error!
-  // - connection.clsoe - something really bad happened
-  const std::array<uint32_t, 2> PUBLISH_ACK = {{AMQP_BASIC_ACK_METHOD, AMQP_BASIC_RETURN_METHOD}};
+  // - connection.close - something really bad happened
+  const std::array<uint32_t, 3> PUBLISH_ACK = 
+      {{AMQP_BASIC_ACK_METHOD, AMQP_BASIC_RETURN_METHOD, AMQP_BASIC_NACK_METHOD}};
   amqp_frame_t response;
   std::array<amqp_channel_t, 1> channels = {{channel}};
   m_impl->GetMethodOnChannel(channels, response, PUBLISH_ACK);
 
+  if (AMQP_BASIC_NACK_METHOD == response.payload.method.id) {
+    amqp_basic_nack_t *return_method =
+        reinterpret_cast<amqp_basic_nack_t *>(response.payload.method.decoded);
+
+    MessageRejectedException message_rejected(return_method->delivery_tag);
+    m_impl->ReturnChannel(channel);
+    m_impl->MaybeReleaseBuffersOnChannel(channel);
+    throw message_rejected;
+  }
+
   if (AMQP_BASIC_RETURN_METHOD == response.payload.method.id) {
-    MessageReturnedException message_returned = m_impl->CreateMessageReturnedException(
-        *(reinterpret_cast<amqp_basic_return_t *>(response.payload.method.decoded)), channel);
+    MessageReturnedException message_returned =
+        m_impl->CreateMessageReturnedException(
+            *(reinterpret_cast<amqp_basic_return_t *>(response.payload.method.decoded)), channel);
 
     const std::array<uint32_t, 1> BASIC_ACK = {{AMQP_BASIC_ACK_METHOD}};
     m_impl->GetMethodOnChannel(channels, response, BASIC_ACK);
@@ -462,7 +685,8 @@ void Channel::BasicPublish(const std::string &exchange_name, const std::string &
 }
 
 bool Channel::BasicGet(Envelope::ptr_t &envelope, const std::string &queue, bool no_ack) {
-  const std::array<uint32_t, 2> GET_RESPONSES = {{AMQP_BASIC_GET_OK_METHOD, AMQP_BASIC_GET_EMPTY_METHOD}};
+  const std::array<uint32_t, 2> GET_RESPONSES = 
+    {{AMQP_BASIC_GET_OK_METHOD, AMQP_BASIC_GET_EMPTY_METHOD}};
   m_impl->CheckIsConnected();
 
   amqp_basic_get_t get = {};
@@ -505,12 +729,17 @@ void Channel::BasicRecover(const std::string &consumer) {
   m_impl->MaybeReleaseBuffersOnChannel(channel);
 }
 
-std::string Channel::BasicConsume(const std::string &queue, const std::string &consumer_tag, bool no_local, bool no_ack,
-                                  bool exclusive, uint16_t message_prefetch_count) {
+std::string Channel::BasicConsume(const std::string &queue,
+                                  const std::string &consumer_tag,
+                                  bool no_local, bool no_ack, bool exclusive, 
+                                  uint16_t message_prefetch_count) {
   return BasicConsume(queue, consumer_tag, no_local, no_ack, exclusive, message_prefetch_count, Table());
 }
-std::string Channel::BasicConsume(const std::string &queue, const std::string &consumer_tag, bool no_local, bool no_ack,
-                                  bool exclusive, uint16_t message_prefetch_count, const Table &arguments) {
+std::string Channel::BasicConsume(const std::string &queue,
+                                  const std::string &consumer_tag,
+                                  bool no_local, bool no_ack, bool exclusive, 
+                                  uint16_t message_prefetch_count,
+                                  const Table &arguments) {
   m_impl->CheckIsConnected();
   amqp_channel_t channel = m_impl->GetChannel();
 
@@ -612,8 +841,7 @@ bool Channel::BasicConsumeMessage(const std::string &consumer_tag, Envelope::ptr
   return m_impl->ConsumeMessageOnChannel(channels, message, timeout);
 }
 
-bool Channel::BasicConsumeMessage(const std::vector<std::string> &consumer_tags, Envelope::ptr_t &message,
-                                  int timeout) {
+bool Channel::BasicConsumeMessage(const std::vector<std::string> &consumer_tags, Envelope::ptr_t &message, int timeout) {
   m_impl->CheckIsConnected();
 
   std::vector<amqp_channel_t> channels;

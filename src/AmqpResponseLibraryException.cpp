@@ -27,16 +27,15 @@
  */
 
 // Put these first to avoid warnings about INT#_C macro redefinition
-#include <amqp.h>
-
 #include "SimpleAmqpClient/AmqpResponseLibraryException.h"
 
+#include <amqp.h>
 #include <stdlib.h>
 
 namespace AmqpClient {
 
-AmqpResponseLibraryException AmqpResponseLibraryException::CreateException(const amqp_rpc_reply_t_ &reply,
-                                                                           const std::string &context) {
+AmqpResponseLibraryException AmqpResponseLibraryException::CreateException(
+    const amqp_rpc_reply_t_ &reply, const std::string &context) {
   std::string message(context);
   message.append(": ");
   message.append(amqp_error_string2(reply.library_error));
@@ -44,7 +43,8 @@ AmqpResponseLibraryException AmqpResponseLibraryException::CreateException(const
   return AmqpResponseLibraryException(message);
 }
 
-AmqpResponseLibraryException::AmqpResponseLibraryException(const std::string &message) throw()
+AmqpResponseLibraryException::AmqpResponseLibraryException(
+    const std::string &message) throw()
     : std::runtime_error(message) {}
 
 }  // namespace AmqpClient

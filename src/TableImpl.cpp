@@ -33,7 +33,6 @@
 #include "SimpleAmqpClient/TableImpl.h"
 
 #include <amqp.h>
-
 #include <string.h>
 
 #include <algorithm>
@@ -103,7 +102,7 @@ amqp_field_value_t TableValueImpl::generate_field_value::operator()(const int32_
 
 amqp_field_value_t TableValueImpl::generate_field_value::operator()(const uint64_t value) const {
   amqp_field_value_t v;
-  v.kind = AMQP_FIELD_KIND_U64;
+  v.kind = AMQP_FIELD_KIND_TIMESTAMP;
   v.value.u64 = value;
   return v;
 }
@@ -200,8 +199,8 @@ amqp_table_t TableValueImpl::CreateAmqpTableInner(const Table &table, amqp_pool_
     std::copy(it->first.begin(), it->first.end(), (char *)output_it->key.bytes);
 
     output_it->value = 
-		/*boost::apply_visitor*/
-        std::visit(TableValueImpl::generate_field_value(pool), it->second.m_impl->m_value);
+        /*boost::apply_visitor*/
+        std::visit(generate_field_value(pool), it->second.m_impl->m_value);
   }
 
   return new_table;
@@ -316,7 +315,8 @@ amqp_field_value_t TableValueImpl::CopyValue(const amqp_field_value_t value, amq
       new_value.value.array.entries =
           (amqp_field_value_t *)amqp_pool_alloc(&pool, sizeof(amqp_field_value_t) * value.value.array.num_entries);
       for (int i = 0; i < value.value.array.num_entries; ++i) {
-        new_value.value.array.entries[i] = CopyValue(value.value.array.entries[i], pool);
+        new_value.value.array.entries[i] =
+            CopyValue(value.value.array.entries[i], pool);
       }
       return new_value;
     }

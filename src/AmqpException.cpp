@@ -26,11 +26,10 @@
  * ***** END LICENSE BLOCK *****
  */
 
-#include <amqp.h>
-#include <amqp_framing.h>
-
 #include "SimpleAmqpClient/AmqpException.h"
 
+#include <amqp.h>
+#include <amqp_framing.h>
 #include <assert.h>
 #include <sstream>
 #include <string>
@@ -151,7 +150,12 @@ void AmqpException::Throw(const amqp_connection_close_t &reply) {
   }
 }
 
-AmqpException::AmqpException(const std::string &what, const std::string &reply_text, uint16_t class_id,
+AmqpException::AmqpException(const std::string &what,
+                             const std::string &reply_text,
+                             uint16_t class_id,
                              uint16_t method_id) throw()
-    : std::runtime_error(what), m_reply_text(reply_text), m_class_id(class_id), m_method_id(method_id) {}
+    : std::runtime_error(what),
+      m_reply_text(reply_text),
+      m_class_id(class_id),
+      m_method_id(method_id) {}
 }  // namespace AmqpClient

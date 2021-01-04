@@ -26,12 +26,12 @@
  * ***** END LICENSE BLOCK *****
  */
 
-#include "connected_test.h"
-
 #include <amqp.h>
 
 #include <algorithm>
 #include <iostream>
+
+#include "connected_test.h"
 
 using namespace AmqpClient;
 

@@ -28,28 +28,41 @@
  * ***** END LICENSE BLOCK *****
  */
 
-#include "SimpleAmqpClient/BasicMessage.h"
-
 #include <stdexcept>
+
+#include "SimpleAmqpClient/BasicMessage.h"
 
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4251 4275)
 #endif
 
+/// @file SimpleAmqpClient/MessageReturnedException.h
+/// Defines AmqpClient::MessageReturnedException
+
 namespace AmqpClient {
 
+/// "Message returned" exception.
 class SIMPLEAMQPCLIENT_EXPORT MessageReturnedException : public std::runtime_error {
  public:
-  explicit MessageReturnedException(BasicMessage::ptr_t message, uint32_t reply_code, const std::string &reply_text,
-                                    const std::string &exchange, const std::string &routing_key) throw();
+  /// Constructor.
+  explicit MessageReturnedException(BasicMessage::ptr_t message,
+                                    uint32_t reply_code,
+                                    const std::string &reply_text,
+                                    const std::string &exchange,
+                                    const std::string &routing_key) throw();
 
   virtual ~MessageReturnedException() throw() {}
 
+  /// `message` getter
   BasicMessage::ptr_t message() const throw() { return m_message; }
+  /// `reply_code` getter
   uint32_t reply_code() const throw() { return m_reply_code; }
+  /// `reply_text` getter
   std::string reply_text() const throw() { return m_reply_text; }
+  /// Exchange name getter
   std::string exchange() const throw() { return m_exchange; }
+  /// Routing key getter
   std::string routing_key() const throw() { return m_routing_key; }
 
  private:

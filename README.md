@@ -33,7 +33,7 @@ Then use your the appropriate build utility to build the library (make, msbuild)
 
 Interesting targets
 +  test - will build and run the tests
-+  install - will install the library and headers to whatever CMAKE_INSTALL_PREFIX is defined to
++  install - will install the library and headers to whatever `CMAKE_INSTALL_PREFIX` is defined to
 +  doc - will generate API documentation if you have doxygen setup
 
 Notes:

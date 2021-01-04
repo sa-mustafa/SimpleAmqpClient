@@ -30,8 +30,11 @@
 
 namespace AmqpClient {
 
-Envelope::Envelope(const BasicMessage::ptr_t message, const std::string &consumer_tag, const uint64_t delivery_tag,
-                   const std::string &exchange, bool redelivered, const std::string &routing_key,
+Envelope::Envelope(const BasicMessage::ptr_t message,
+                   const std::string &consumer_tag,
+                   const uint64_t delivery_tag,
+                   const std::string &exchange, bool redelivered,
+                   const std::string &routing_key,
                    const uint16_t delivery_channel)
     : m_message(message),
       m_consumerTag(consumer_tag),

@@ -11,9 +11,9 @@ PROJECT(SimpleAmqpClient)
 # 3. If any interfaces have been added since the last public release, then increment age.
 # 4. If any interfaces have been removed since the last public release, then set age to 0.
 
-set(SAC_SOVERSION_CURRENT   6)
-set(SAC_SOVERSION_REVISION  0)
-set(SAC_SOVERSION_AGE       4)
+set(SAC_SOVERSION_CURRENT   7)
+set(SAC_SOVERSION_REVISION  1)
+set(SAC_SOVERSION_AGE       0)
 
 math(EXPR SAC_SOVERSION_MAJOR "${SAC_SOVERSION_CURRENT} - ${SAC_SOVERSION_AGE}")
 math(EXPR SAC_SOVERSION_MINOR "${SAC_SOVERSION_AGE}")
@@ -32,11 +32,8 @@ string(REGEX MATCH "[0-9]+" _API_VERSION_PATCH ${_API_VERSION_PATCH})
 
 set(SAC_APIVERSION ${_API_VERSION_MAJOR}.${_API_VERSION_MINOR}.${_API_VERSION_PATCH})
 
-FIND_PACKAGE(Boost 1.47.0)
-INCLUDE_DIRECTORIES(SYSTEM ${Boost_INCLUDE_DIRS})
-
-SET(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Modules)
-FIND_PACKAGE(Rabbitmqc REQUIRED)
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/Modules)
+find_package(Rabbitmqc REQUIRED)
 INCLUDE_DIRECTORIES(SYSTEM ${Rabbitmqc_INCLUDE_DIRS})
 
 option(ENABLE_SSL_SUPPORT "Enable SSL support." ${Rabbitmqc_SSL_ENABLED})
@@ -75,7 +72,7 @@ if (WIN32 AND NOT BUILD_SHARED_LIBS)
   message(FATAL_ERROR "The SimpleAmqpClient library cannot be built as a static library on Win32. Set BUILD_SHARED_LIBS=ON to get around this.")
 endif()
 
-SET(SAC_LIB_SRCS
+set(SAC_LIB_SRCS
     src/SimpleAmqpClient/SimpleAmqpClient.h
 
     src/SimpleAmqpClient/AmqpException.h
@@ -101,6 +98,7 @@ SET(SAC_LIB_SRCS
     src/SimpleAmqpClient/BadUriException.h
     src/SimpleAmqpClient/ConnectionClosedException.h
     src/SimpleAmqpClient/ConsumerTagNotFoundException.h
+    src/SimpleAmqpClient/MessageRejectedException.h
 
     src/SimpleAmqpClient/Envelope.h
     src/Envelope.cpp
@@ -116,8 +114,8 @@ SET(SAC_LIB_SRCS
     )
 
 
-ADD_LIBRARY(SimpleAmqpClient ${SAC_LIB_SRCS})
-TARGET_LINK_LIBRARIES(SimpleAmqpClient ${Rabbitmqc_LIBRARY} ${SOCKET_LIBRARY} ${Boost_LIBRARIES} $<$<BOOL:${Boost_Dynamic_Linking_ENABLED}>:Boost::dynamic_linking>)
+add_library(SimpleAmqpClient ${SAC_LIB_SRCS})
+target_link_libraries(SimpleAmqpClient ${Rabbitmqc_LIBRARY} ${SOCKET_LIBRARY})
 
 if (WIN32)
   set_target_properties(SimpleAmqpClient PROPERTIES VERSION ${SAC_VERSION} OUTPUT_NAME SimpleAmqpClient.${SAC_SOVERSION})
@@ -134,12 +132,14 @@ if (ENABLE_TESTING)
 
     set(BUILD_GTEST ON)
     set(BUILD_GMOCK OFF)
+    set(INSTALL_GTEST OFF)
 
     # This only affects targets declared after this.
     set(BUILD_SHARED_LIBS OFF)
 
     mark_as_advanced(BUILD_GMOCK)
     mark_as_advanced(BUILD_GTEST)
+    mark_as_advanced(INSTALL_GTEST)
     mark_as_advanced(gmock_build_tests)
     mark_as_advanced(gtest_build_samples)
     mark_as_advanced(gtest_build_tests)
@@ -153,19 +153,34 @@ endif (ENABLE_TESTING)
 
 
 # Documentation generation
-SET(DOXYFILE_LATEX "NO")
-SET(PROJECT_VERSION ${SAC_VERSION})
-INCLUDE(UseDoxygen)
+find_package(Doxygen COMPONENTS dot)
+option(BUILD_API_DOCS "Build Doxygen API docs" ${DOXYGEN_FOUND})
 
-INCLUDE(GNUInstallDirs)
+if (BUILD_API_DOCS)
+  if (NOT DOXYGEN_FOUND)
+    message(FATAL_ERROR "Doxygen is required to build the API documentation")
+  endif ()
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile @ONLY)
 
-INSTALL(TARGETS SimpleAmqpClient
+  add_custom_target(docs ALL
+    COMMAND ${DOXYGEN_EXECUTABLE}
+    VERBATIM
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/docs
+    DEPENDS SimpleAmqpClient
+    COMMENT "Generating API documentation"
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in
+    )
+endif ()
+
+include(GNUInstallDirs)
+
+install(TARGETS SimpleAmqpClient
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     )
 
-INSTALL(FILES
+install(FILES
     src/SimpleAmqpClient/AmqpException.h
     src/SimpleAmqpClient/AmqpLibraryException.h
     src/SimpleAmqpClient/AmqpResponseLibraryException.h
@@ -177,6 +192,7 @@ INSTALL(FILES
     src/SimpleAmqpClient/ConsumerTagNotFoundException.h
     src/SimpleAmqpClient/Envelope.h
     src/SimpleAmqpClient/MessageReturnedException.h
+    src/SimpleAmqpClient/MessageRejectedException.h
     src/SimpleAmqpClient/SimpleAmqpClient.h
     src/SimpleAmqpClient/Table.h
     src/SimpleAmqpClient/Util.h
@@ -188,19 +204,6 @@ set(prefix ${CMAKE_INSTALL_PREFIX})
 set(exec_prefix "\${prefix}")
 set(libdir ${CMAKE_INSTALL_LIBDIR})
 set(includedir "\${prefix}/include")
-
-foreach(_lib ${Boost_LIBRARIES})
-    get_filename_component(_LIBPATH ${_lib} PATH)
-    if (NOT _LIBPATH STREQUAL _LASTLIBPATH)
-        set(libs_private "${libs_private} -L${_LIBPATH}")
-        set(_LASTLIBPATH ${_LIBPATH})
-    endif()
-
-    get_filename_component(_LIBNAME ${_lib} NAME_WE)
-    string(REGEX REPLACE "^lib" "" _LIBNAME ${_LIBNAME})
-    set(_LIBNAME "-l${_LIBNAME}")
-    set(libs_private "${libs_private} ${_LIBNAME}")
-endforeach()
 
 configure_file(libSimpleAmqpClient.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libSimpleAmqpClient.pc @ONLY)
 

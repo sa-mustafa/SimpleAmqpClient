@@ -42,17 +42,25 @@
 struct amqp_bytes_t_;
 struct amqp_basic_properties_t_;
 
+/// @file SimpleAmqpClient/BasicMessage.h
+/// The AmqpClient::BasicMessage class is defined in this header file.
+
 namespace AmqpClient {
 
-namespace Detail {
-class BasicMessageImpl;
-}
-
+/**
+ * An AMQP BasicMessage
+ */
 class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
  public:
+  /// A shared pointer to BasicMessage
   typedef std::shared_ptr<BasicMessage> ptr_t;
 
-  enum delivery_mode_t { dm_nonpersistent = 1, dm_persistent = 2 };
+  /// With durable queues, messages can be requested to persist or not
+  enum delivery_mode_t {
+    dm_notset = 0,
+    dm_nonpersistent = 1,
+    dm_persistent = 2
+  };
 
   /**
    * Create a new empty BasicMessage object
@@ -60,30 +68,27 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   static ptr_t Create() { return std::make_shared<BasicMessage>(); }
 
   /**
-   * Create a new BasicMessage object
-   * Creates a new BasicMessage object with a given body
+   * Creates a new BasicMessage object with given body
+   *
    * @param body the message body.
    * @returns a new BasicMessage object
    */
-  static ptr_t Create(const std::string &body) { return std::make_shared<BasicMessage>(body); }
+  static ptr_t Create(const std::string& body) { return std::make_shared<BasicMessage>(body); }
 
   /**
-   * Create a new BasicMessage object
    * Creates a new BasicMessage object with a given body, properties
    * @param body the message body. The message body is NOT duplicated.
-   * Passed in message body is deallocated when: body is set or message is
-   * destructed.
-   * @properties the amqp_basic_properties_t struct. Note this makes a deep
-   * copy of the properties struct
+   * Passed in message body is deallocated when: body is set or message is destructed.
+   * @properties the amqp_basic_properties_t struct. Note this makes a deep copy of the properties struct
    * @returns a new BasicMessage object
    */
-  static ptr_t Create(amqp_bytes_t_ &body, amqp_basic_properties_t_ *properties) {
-    return std::make_shared<BasicMessage>(body, properties);
-  }
+  static ptr_t Create(amqp_bytes_t_& body, amqp_basic_properties_t_ *properties) { return std::make_shared<BasicMessage>(body, properties); }
 
+  /// Construct empty BasicMessage
   BasicMessage();
-  BasicMessage(const std::string &body);
-  BasicMessage(const amqp_bytes_t_ &body, const amqp_basic_properties_t_ *properties);
+  /// Construct BasicMessage with given body
+  BasicMessage(const std::string& body);
+  BasicMessage(const amqp_bytes_t_& body, const amqp_basic_properties_t_* props);
 
  public:
   /**
@@ -92,39 +97,24 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   virtual ~BasicMessage();
 
   /**
-   * INTERNAL INTERFACE: Gets the internal amqp_basic_properties_t struct
-   *
-   * Retrieves a reference to the internal structure used to keep track of
-   * the properties of the message. Changing members of this structure will
-   * modify the properties on the message.
-   * @returns the amqp_basic_properties_t* struct
-   */
-  const amqp_basic_properties_t_ *getAmqpProperties() const;
-  /**
-   * INTERNAL INTERFACE: Gets the amqp_bytes_t representation of the message body
-   *
-   * @returns the message body. Note this is owned by the message and will
-   * be freed when the BasicMessage is destructed
-   */
-  const amqp_bytes_t_ &getAmqpBody() const;
-
-  /**
    * Gets the message body as a std::string
    */
-  std::string Body() const;
+  const std::string& Body() const;
+  std::string& Body();
+
   /**
    * Sets the message body as a std::string
    */
-  void Body(const std::string &body);
+  void Body(const std::string& body);
 
   /**
    * Gets the content type property
    */
-  std::string ContentType() const;
+  const std::string& ContentType() const;
   /**
    * Sets the content type property
    */
-  void ContentType(const std::string &content_type);
+  void ContentType(const std::string& content_type);
   /**
    * Determines whether the content type property is set
    */
@@ -137,11 +127,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the content encoding property
    */
-  std::string ContentEncoding() const;
+  const std::string& ContentEncoding() const;
   /**
    * Sets the content encoding property
    */
-  void ContentEncoding(const std::string &content_encoding);
+  void ContentEncoding(const std::string& content_encoding);
   /**
    * Determines whether the content encoding property is set
    */
@@ -188,11 +178,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the correlation id property
    */
-  std::string CorrelationId() const;
+  const std::string& CorrelationId() const;
   /**
    * Sets the correlation id property
    */
-  void CorrelationId(const std::string &correlation_id);
+  void CorrelationId(const std::string& correlation_id);
   /**
    * Determines whether the correlation id property is set
    */
@@ -205,11 +195,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the reply to property
    */
-  std::string ReplyTo() const;
+  const std::string& ReplyTo() const;
   /**
    * Sets the reply to property
    */
-  void ReplyTo(const std::string &reply_to);
+  void ReplyTo(const std::string& reply_to);
   /**
    * Determines whether the reply to property is set
    */
@@ -222,11 +212,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the expiration property
    */
-  std::string Expiration() const;
+  const std::string& Expiration() const;
   /**
    * Sets the expiration property
    */
-  void Expiration(const std::string &expiration);
+  void Expiration(const std::string& expiration);
   /**
    * Determines whether the expiration property is set
    */
@@ -239,11 +229,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the message id property
    */
-  std::string MessageId() const;
+  const std::string& MessageId() const;
   /**
    * Sets the message id property
    */
-  void MessageId(const std::string &message_id);
+  void MessageId(const std::string& message_id);
   /**
    * Determines if the message id property is set
    */
@@ -273,11 +263,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the type property
    */
-  std::string Type() const;
+  const std::string& Type() const;
   /**
    * Sets the type property
    */
-  void Type(const std::string &type);
+  void Type(const std::string& type);
   /**
    * Determines whether the type property is set
    */
@@ -290,11 +280,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the user id property
    */
-  std::string UserId() const;
+  const std::string& UserId() const;
   /**
    * Sets the user id property
    */
-  void UserId(const std::string &user_id);
+  void UserId(const std::string& user_id);
   /**
    * Determines whether the user id property is set
    */
@@ -307,11 +297,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the app id property
    */
-  std::string AppId() const;
+  const std::string& AppId() const;
   /**
    * Sets the app id property
    */
-  void AppId(const std::string &app_id);
+  void AppId(const std::string& app_id);
   /**
    * Determines whether the app id property is set
    */
@@ -324,11 +314,11 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   /**
    * Gets the cluster id property
    */
-  std::string ClusterId() const;
+  const std::string& ClusterId() const;
   /**
    * Sets the custer id property
    */
-  void ClusterId(const std::string &cluster_id);
+  void ClusterId(const std::string& cluster_id);
   /**
    * Determines if the cluster id property is set
    */
@@ -339,24 +329,27 @@ class SIMPLEAMQPCLIENT_EXPORT BasicMessage : noncopyable {
   void ClusterIdClear();
 
   /**
-   * Gets the cluster id property
+   * Gets the header table property
    */
-  Table HeaderTable() const;
+  Table& HeaderTable();
+  const Table& HeaderTable() const;
   /**
-   * Sets the cluster id property
+   * Sets the header table property
    */
-  void HeaderTable(const Table &header_table);
+  void HeaderTable(const Table& header_table);
   /**
    * Is there a header table associated with the message
    */
   bool HeaderTableIsSet() const;
   /**
-   * Unsets the cluster id property
+   * Unsets the header table property
    */
   void HeaderTableClear();
 
  protected:
-  std::unique_ptr<Detail::BasicMessageImpl> m_impl;
+  struct Impl;
+  /// PIMPL idiom
+  std::unique_ptr<Impl> m_impl;
 };
 
 }  // namespace AmqpClient
